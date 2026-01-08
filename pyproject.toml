@@ -26,3 +26,6 @@ packages = ["src/fabula"]
 [tool.ruff]
 line-length = 100
 
+[project.scripts]
+fabula = "fabula.cli:main"
+
