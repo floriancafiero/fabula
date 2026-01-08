@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
@@ -10,15 +10,27 @@ from .schemas import ArcResult
 from .scorer import TransformersScorer, valence_from_probs
 from .segment import RegexSentenceSegmenter
 
+_ANALYSIS_TYPES = {"sentiment", "emotion"}
+
 
 @dataclass
 class Fabula:
     scorer: TransformersScorer
     segmenter: Any = None  # must implement .segment(text) -> List[Segment]
+    analysis: str = "sentiment"
 
     def __post_init__(self):
         if self.segmenter is None:
             self.segmenter = RegexSentenceSegmenter()
+        if self.analysis not in _ANALYSIS_TYPES:
+            raise ValueError(f"Unknown analysis type: {self.analysis}")
+
+    def _score_from_probs(self, probs: Dict[str, float]) -> Optional[float]:
+        if self.analysis == "sentiment":
+            return valence_from_probs(probs)
+        if self.analysis == "emotion":
+            return max(probs.values()) if probs else None
+        raise ValueError(f"Unknown analysis type: {self.analysis}")
 
     def score(self, text: str) -> pd.DataFrame:
         segs = self.segmenter.segment(text)
@@ -27,7 +39,7 @@ class Fabula:
         rows: List[Dict[str, Any]] = []
         for s, probs in zip(segs, probs_list):
             label = max(probs.items(), key=lambda kv: kv[1])[0] if probs else ""
-            score = valence_from_probs(probs)
+            score = self._score_from_probs(probs)
             rows.append(
                 {
                     "idx": s.idx,

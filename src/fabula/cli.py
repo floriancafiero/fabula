@@ -13,20 +13,34 @@ from .core import Fabula
 from .segment import ParagraphSegmenter, RegexSentenceSegmenter, SlidingWindowTokenSegmenter
 
 
+DEFAULT_MODELS = {
+    "sentiment": "cmarkea/distilcamembert-base-sentiment",
+    "emotion": "astrosbd",
+}
+
+
 @dataclass
 class DummyScorer:
     """
     Tiny scorer for CLI smoke tests (no transformers, no downloads).
     Produces stable probabilities so arc/score pipelines can be tested.
     """
+    analysis: str = "sentiment"
+
     def predict_proba(self, texts: Sequence[str]) -> List[Dict[str, float]]:
         out: List[Dict[str, float]] = []
         for t in texts:
             # tiny heuristic to vary a bit
             if any(w in t.lower() for w in ["triste", "peur", "colère", "haine"]):
-                out.append({"POSITIVE": 0.2, "NEGATIVE": 0.8})
+                if self.analysis == "emotion":
+                    out.append({"TRISTESSE": 0.7, "PEUR": 0.2, "JOIE": 0.1})
+                else:
+                    out.append({"POSITIVE": 0.2, "NEGATIVE": 0.8})
             else:
-                out.append({"POSITIVE": 0.7, "NEGATIVE": 0.3})
+                if self.analysis == "emotion":
+                    out.append({"JOIE": 0.7, "SURPRISE": 0.2, "NEUTRE": 0.1})
+                else:
+                    out.append({"POSITIVE": 0.7, "NEGATIVE": 0.3})
         return out
 
 
@@ -86,11 +100,18 @@ def _make_segmenter(kind: str, scorer_or_none, window_tokens: int, stride_tokens
     raise ValueError(f"Unknown segmenter kind: {kind}")
 
 
+def _resolve_model(analysis: str, model: Optional[str]) -> str:
+    if model is not None:
+        return model
+    return DEFAULT_MODELS[analysis]
+
+
 def cmd_score(args: argparse.Namespace) -> int:
     text = _read_text(args.input, encoding=args.encoding)
 
-    scorer = DummyScorer() if args.dummy else _load_transformers_scorer(
-        model=args.model,
+    model = _resolve_model(args.analysis, args.model)
+    scorer = DummyScorer(analysis=args.analysis) if args.dummy else _load_transformers_scorer(
+        model=model,
         device=args.device,
         batch_size=args.batch_size,
         max_length=args.max_length,
@@ -104,7 +125,7 @@ def cmd_score(args: argparse.Namespace) -> int:
         min_tokens=args.min_tokens,
     )
 
-    fb = Fabula(scorer=scorer, segmenter=segmenter)
+    fb = Fabula(scorer=scorer, segmenter=segmenter, analysis=args.analysis)
     df = fb.score(text)
 
     fmt = args.format.lower()
@@ -124,8 +145,9 @@ def cmd_score(args: argparse.Namespace) -> int:
 def cmd_arc(args: argparse.Namespace) -> int:
     text = _read_text(args.input, encoding=args.encoding)
 
-    scorer = DummyScorer() if args.dummy else _load_transformers_scorer(
-        model=args.model,
+    model = _resolve_model(args.analysis, args.model)
+    scorer = DummyScorer(analysis=args.analysis) if args.dummy else _load_transformers_scorer(
+        model=model,
         device=args.device,
         batch_size=args.batch_size,
         max_length=args.max_length,
@@ -139,7 +161,7 @@ def cmd_arc(args: argparse.Namespace) -> int:
         min_tokens=args.min_tokens,
     )
 
-    fb = Fabula(scorer=scorer, segmenter=segmenter)
+    fb = Fabula(scorer=scorer, segmenter=segmenter, analysis=args.analysis)
     arc = fb.arc(
         text,
         n_points=args.n_points,
@@ -190,8 +212,12 @@ def build_parser() -> argparse.ArgumentParser:
 
         sp.add_argument("--dummy", action="store_true", help="Use dummy scorer (no transformers download).")
 
-        sp.add_argument("--model", default="cmarkea/distilcamembert-base-sentiment",
-                        help="Hugging Face model id (ignored with --dummy).")
+        sp.add_argument("--analysis", choices=["sentiment", "emotion"], default="sentiment",
+                        help="Analysis type (default: sentiment).")
+        sp.add_argument("--model", default=None,
+                        help="Hugging Face model id (ignored with --dummy). "
+                             "Defaults to cmarkea/distilcamembert-base-sentiment for sentiment "
+                             "and astrosbd for emotion.")
         sp.add_argument("--device", default=None, help="cpu, cuda, cuda:0 (default: auto).")
         sp.add_argument("--batch-size", type=int, default=16, help="Batch size for inference.")
         sp.add_argument("--max-length", type=int, default=512, help="Max tokens per segment fed to the model.")
