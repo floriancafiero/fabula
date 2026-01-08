@@ -64,13 +64,17 @@ class Fabula:
         if fallback_to_maxprob:
             mask = pd.isna(df[score_col])
             if bool(mask.any()):
+                probs_list = df["probs"].tolist()
                 raw_y = [
-                    (max(p.values()) if isinstance(p, dict) and len(p) else float("nan"))
-                    for p in df["probs"].tolist()
+                    (
+                        max(p.values())
+                        if missing and isinstance(p, dict) and len(p)
+                        else y
+                    )
+                    for y, p, missing in zip(raw_y, probs_list, mask.tolist())
                 ]
 
         x_rs, y_rs = resample_to_n(raw_x, raw_y, n_points=n_points)
         y_sm = smooth_moving_average(y_rs, window=smooth_window)
 
         return ArcResult(x=x_rs, y=y_sm, raw_x=raw_x, raw_y=raw_y)
-
