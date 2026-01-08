@@ -15,7 +15,7 @@ from .segment import ParagraphSegmenter, RegexSentenceSegmenter, SlidingWindowTo
 
 DEFAULT_MODELS = {
     "sentiment": "cmarkea/distilcamembert-base-sentiment",
-    "emotion": "astrosbd",
+    "emotion": "astrosbd/french_emotion_camembert",
 }
 
 
