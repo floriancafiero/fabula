@@ -1,1 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fabula"
+version = "0.1.0"
+description = "Transformers-based narrative sentiment/emotion arcs for literature (syuzhet-like)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Florian Cafiero and Alexandre Lionnet" }]
+dependencies = [
+  "numpy",
+  "pandas",
+]
+
+[project.optional-dependencies]
+transformers = ["transformers>=4.40", "torch"]
+dev = ["pytest>=7", "ruff>=0.5"]
+plot = ["matplotlib"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fabula"]
+
+[tool.ruff]
+line-length = 100
 
