@@ -17,6 +17,7 @@ dependencies = [
 
 [project.optional-dependencies]
 transformers = ["transformers>=4.40", "torch"]
+transformers-sp = ["transformers>=4.40", "torch", "sentencepiece"]
 dev = ["pytest>=7", "ruff>=0.5"]
 plot = ["matplotlib"]
 
@@ -28,4 +29,3 @@ line-length = 100
 
 [project.scripts]
 fabula = "fabula.cli:main"
-
