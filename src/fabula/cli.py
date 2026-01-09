@@ -166,6 +166,9 @@ def cmd_arc(args: argparse.Namespace) -> int:
         text,
         n_points=args.n_points,
         smooth_window=args.smooth_window,
+        smooth_method=args.smooth_method,
+        smooth_sigma=args.smooth_sigma,
+        smooth_pad_mode=args.smooth_pad_mode,
         score_col=args.score_col,
         fallback_to_maxprob=args.fallback_to_maxprob,
     )
@@ -237,7 +240,25 @@ def build_parser() -> argparse.ArgumentParser:
     add_common(sp_arc)
     sp_arc.add_argument("--format", choices=["csv", "json"], default="csv", help="Output format.")
     sp_arc.add_argument("--n-points", type=int, default=100, help="Resample the arc to N points.")
-    sp_arc.add_argument("--smooth-window", type=int, default=9, help="Moving average window size.")
+    sp_arc.add_argument("--smooth-window", type=int, default=9, help="Smoothing window size.")
+    sp_arc.add_argument(
+        "--smooth-method",
+        choices=["moving_average", "gaussian", "none"],
+        default="moving_average",
+        help="Smoothing method (default: moving_average).",
+    )
+    sp_arc.add_argument(
+        "--smooth-sigma",
+        type=float,
+        default=None,
+        help="Gaussian sigma (default: window/6). Only used with --smooth-method=gaussian.",
+    )
+    sp_arc.add_argument(
+        "--smooth-pad-mode",
+        choices=["reflect", "edge", "constant"],
+        default="reflect",
+        help="Padding mode for smoothing (default: reflect).",
+    )
     sp_arc.add_argument("--score-col", default="score", help="Column to use as scalar score.")
     sp_arc.add_argument("--no-fallback-to-maxprob", dest="fallback_to_maxprob", action="store_false",
                         help="Disable fallback scalar using max(prob) when score is missing.")
