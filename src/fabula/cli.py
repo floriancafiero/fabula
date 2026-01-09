@@ -82,10 +82,24 @@ def _df_to_jsonl(df: pd.DataFrame) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _load_transformers_scorer(model: str, device: Optional[str], batch_size: int, max_length: int):
+def _load_transformers_scorer(
+    model: str,
+    device: Optional[str],
+    batch_size: int,
+    max_length: int,
+    pooling: str,
+    pooling_stride_tokens: Optional[int],
+):
     # import lazily so CLI can run in dummy mode without transformers installed
     from .scorer import TransformersScorer
-    return TransformersScorer(model=model, device=device, batch_size=batch_size, max_length=max_length)
+    return TransformersScorer(
+        model=model,
+        device=device,
+        batch_size=batch_size,
+        max_length=max_length,
+        pooling=pooling,
+        pooling_stride_tokens=pooling_stride_tokens,
+    )
 
 
 def _make_segmenters(
@@ -138,6 +152,8 @@ def cmd_score(args: argparse.Namespace) -> int:
         device=args.device,
         batch_size=args.batch_size,
         max_length=args.max_length,
+        pooling=args.pooling,
+        pooling_stride_tokens=args.pooling_stride_tokens,
     )
 
     segmenter, coarse_segmenter = _make_segmenters(
@@ -184,6 +200,8 @@ def cmd_arc(args: argparse.Namespace) -> int:
         device=args.device,
         batch_size=args.batch_size,
         max_length=args.max_length,
+        pooling=args.pooling,
+        pooling_stride_tokens=args.pooling_stride_tokens,
     )
 
     segmenter, coarse_segmenter = _make_segmenters(
@@ -267,6 +285,10 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument("--device", default=None, help="cpu, cuda, cuda:0 (default: auto).")
         sp.add_argument("--batch-size", type=int, default=16, help="Batch size for inference.")
         sp.add_argument("--max-length", type=int, default=512, help="Max tokens per segment fed to the model.")
+        sp.add_argument("--pooling", choices=["none", "mean", "max", "attention"], default="none",
+                        help="Chunk-level pooling for long inputs (default: none).")
+        sp.add_argument("--pooling-stride-tokens", type=int, default=None,
+                        help="Stride for pooled chunking (default: max_length/4).")
 
         sp.add_argument("--segment", choices=["sentence", "paragraph", "window", "document"], default="sentence",
                         help="Segmentation strategy (default: sentence).")
