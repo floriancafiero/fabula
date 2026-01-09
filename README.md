@@ -66,13 +66,19 @@ Fabula supports multiple segmenters via `--segment`:
 - `window` (token sliding windows)
 - `document` (sentence segments with coarse document chunks)
 
-Window segmentation options:
+### Window segmentation (token sliding windows)
+
+Use window segmentation for long texts with overlap:
 
 ```bash
 fabula score my.txt --segment window --window-tokens 256 --stride-tokens 64
 ```
 
-Document chunking with interpolation between sentence and chunk scores:
+### Document chunking + interpolation
+
+The `document` mode scores sentences and coarse document chunks, then blends
+their probabilities. Use this when sentence-only scoring misses long-range
+context.
 
 ```bash
 fabula score my.txt \
@@ -90,4 +96,39 @@ truncating a single sequence. Configure pooling and stride:
 
 ```bash
 fabula score my.txt --pooling mean --pooling-stride-tokens 128
+```
+
+## Graphic output
+
+Fabula does not generate plots by default. The CLI can save a plot when you use
+`fabula arc` with `--plot` (requires the optional matplotlib extra).
+
+## Output structure
+
+`fabula score` returns one row per segment with:
+
+- `rel_pos`: segment position in the document (0..1)
+- `label`: top predicted label
+- `score`: scalar score used for arcs
+- `probs`: probability distribution
+- `chunk_probs`: pooled chunk probabilities (only in `document` mode)
+
+## Common recipes
+
+### Quick sentiment arc
+
+```bash
+fabula arc my.txt --analysis sentiment --n-points 100
+```
+
+### Emotion arc
+
+```bash
+fabula arc my.txt --analysis emotion --n-points 100
+```
+
+### Long document, fewer API calls
+
+```bash
+fabula score my.txt --segment document --chunk-tokens 2048 --chunk-weight 0.4
 ```
