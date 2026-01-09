@@ -1,5 +1,5 @@
 # fabula
-A Python package to study the evolution of a narration through sentiment and emotion analysis. 
+A Python package to study the evolution of sentiment and emotions throughout a document. 
 
 Implementation only for contemporary French language for now.
 
