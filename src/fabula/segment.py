@@ -141,3 +141,75 @@ class SlidingWindowTokenSegmenter:
 
         return segments
 
+
+@dataclass
+class DocumentChunkTokenSegmenter:
+    """
+    Chunk segmenter for long documents using tokenizer offsets.
+
+    Uses token offsets to estimate character positions for alignment.
+    """
+    tokenizer: any
+    chunk_tokens: int = 1024
+    stride_tokens: int = 1024
+    min_tokens: int = 128
+    decode_kwargs: Optional[dict] = None
+
+    def segment(self, text: str) -> List[Segment]:
+        if self.decode_kwargs is None:
+            self.decode_kwargs = {"skip_special_tokens": True, "clean_up_tokenization_spaces": True}
+
+        if self.stride_tokens <= 0:
+            raise ValueError("stride_tokens must be positive.")
+
+        enc = self.tokenizer(
+            text,
+            add_special_tokens=False,
+            return_attention_mask=False,
+            return_offsets_mapping=True,
+            return_tensors=None,
+        )
+        input_ids: Sequence[int] = enc["input_ids"]
+        offsets = enc.get("offset_mapping")
+        if offsets is None:
+            raise ValueError("Tokenizer must provide offsets for document chunking.")
+
+        n_tokens = len(input_ids)
+        if n_tokens == 0:
+            return []
+
+        segments: List[Segment] = []
+        idx = 0
+        n_chars = len(text)
+
+        start = 0
+        while start < n_tokens:
+            end = min(start + self.chunk_tokens, n_tokens)
+            length = end - start
+            if length < self.min_tokens:
+                break
+
+            chunk_ids = input_ids[start:end]
+            chunk_text = self.tokenizer.decode(chunk_ids, **self.decode_kwargs).strip()
+            if chunk_text:
+                start_char = offsets[start][0]
+                end_char = offsets[end - 1][1]
+                rel_pos = start_char / max(n_chars, 1)
+                segments.append(
+                    Segment(
+                        idx=idx,
+                        text=chunk_text,
+                        rel_pos=rel_pos,
+                        start_char=start_char,
+                        end_char=end_char,
+                        start_token=start,
+                        end_token=end,
+                    )
+                )
+                idx += 1
+
+            if end == n_tokens:
+                break
+            start += self.stride_tokens
+
+        return segments
