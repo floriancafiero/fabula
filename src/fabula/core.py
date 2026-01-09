@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
-from .arc import resample_to_n, smooth_moving_average
+from .arc import resample_to_n, smooth_series
 from .schemas import ArcResult
 from .scorer import TransformersScorer, valence_from_probs
 from .segment import RegexSentenceSegmenter
@@ -62,6 +62,9 @@ class Fabula:
         text: str,
         n_points: int = 100,
         smooth_window: int = 7,
+        smooth_method: str = "moving_average",
+        smooth_sigma: Optional[float] = None,
+        smooth_pad_mode: str = "reflect",
         score_col: str = "score",
         fallback_to_maxprob: bool = True,
     ) -> ArcResult:
@@ -87,6 +90,12 @@ class Fabula:
                 ]
 
         x_rs, y_rs = resample_to_n(raw_x, raw_y, n_points=n_points)
-        y_sm = smooth_moving_average(y_rs, window=smooth_window)
+        y_sm = smooth_series(
+            y_rs,
+            method=smooth_method,
+            window=smooth_window,
+            sigma=smooth_sigma,
+            pad_mode=smooth_pad_mode,
+        )
 
         return ArcResult(x=x_rs, y=y_sm, raw_x=raw_x, raw_y=raw_y)
