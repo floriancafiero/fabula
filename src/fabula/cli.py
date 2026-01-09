@@ -10,7 +10,12 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import pandas as pd
 
 from .core import Fabula
-from .segment import ParagraphSegmenter, RegexSentenceSegmenter, SlidingWindowTokenSegmenter
+from .segment import (
+    DocumentChunkTokenSegmenter,
+    ParagraphSegmenter,
+    RegexSentenceSegmenter,
+    SlidingWindowTokenSegmenter,
+)
 
 
 DEFAULT_MODELS = {
@@ -77,17 +82,40 @@ def _df_to_jsonl(df: pd.DataFrame) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _load_transformers_scorer(model: str, device: Optional[str], batch_size: int, max_length: int):
+def _load_transformers_scorer(
+    model: str,
+    device: Optional[str],
+    batch_size: int,
+    max_length: int,
+    pooling: str,
+    pooling_stride_tokens: Optional[int],
+):
     # import lazily so CLI can run in dummy mode without transformers installed
     from .scorer import TransformersScorer
-    return TransformersScorer(model=model, device=device, batch_size=batch_size, max_length=max_length)
+    return TransformersScorer(
+        model=model,
+        device=device,
+        batch_size=batch_size,
+        max_length=max_length,
+        pooling=pooling,
+        pooling_stride_tokens=pooling_stride_tokens,
+    )
 
 
-def _make_segmenter(kind: str, scorer_or_none, window_tokens: int, stride_tokens: int, min_tokens: int):
+def _make_segmenters(
+    kind: str,
+    scorer_or_none,
+    window_tokens: int,
+    stride_tokens: int,
+    min_tokens: int,
+    chunk_tokens: int,
+    chunk_stride_tokens: int,
+    chunk_min_tokens: int,
+) -> Tuple[object, Optional[object]]:
     if kind == "sentence":
-        return RegexSentenceSegmenter()
+        return RegexSentenceSegmenter(), None
     if kind == "paragraph":
-        return ParagraphSegmenter()
+        return ParagraphSegmenter(), None
     if kind == "window":
         if scorer_or_none is None or getattr(scorer_or_none, "tokenizer", None) is None:
             raise ValueError("Window segmentation requires a transformers tokenizer (disable --dummy).")
@@ -96,6 +124,15 @@ def _make_segmenter(kind: str, scorer_or_none, window_tokens: int, stride_tokens
             window_tokens=window_tokens,
             stride_tokens=stride_tokens,
             min_tokens=min_tokens,
+        ), None
+    if kind == "document":
+        if scorer_or_none is None or getattr(scorer_or_none, "tokenizer", None) is None:
+            raise ValueError("Document chunking requires a transformers tokenizer (disable --dummy).")
+        return RegexSentenceSegmenter(), DocumentChunkTokenSegmenter(
+            tokenizer=scorer_or_none.tokenizer,
+            chunk_tokens=chunk_tokens,
+            stride_tokens=chunk_stride_tokens,
+            min_tokens=chunk_min_tokens,
         )
     raise ValueError(f"Unknown segmenter kind: {kind}")
 
@@ -115,17 +152,29 @@ def cmd_score(args: argparse.Namespace) -> int:
         device=args.device,
         batch_size=args.batch_size,
         max_length=args.max_length,
+        pooling=args.pooling,
+        pooling_stride_tokens=args.pooling_stride_tokens,
     )
 
-    segmenter = _make_segmenter(
+    segmenter, coarse_segmenter = _make_segmenters(
         kind=args.segment,
         scorer_or_none=None if args.dummy else scorer,
         window_tokens=args.window_tokens,
         stride_tokens=args.stride_tokens,
         min_tokens=args.min_tokens,
+        chunk_tokens=args.chunk_tokens,
+        chunk_stride_tokens=args.chunk_stride_tokens,
+        chunk_min_tokens=args.chunk_min_tokens,
     )
 
-    fb = Fabula(scorer=scorer, segmenter=segmenter, analysis=args.analysis)
+    fb = Fabula(
+        scorer=scorer,
+        segmenter=segmenter,
+        coarse_segmenter=coarse_segmenter,
+        analysis=args.analysis,
+        chunk_weight=args.chunk_weight,
+        chunk_attention_tau=args.chunk_attention_tau,
+    )
     df = fb.score(text)
 
     fmt = args.format.lower()
@@ -151,17 +200,29 @@ def cmd_arc(args: argparse.Namespace) -> int:
         device=args.device,
         batch_size=args.batch_size,
         max_length=args.max_length,
+        pooling=args.pooling,
+        pooling_stride_tokens=args.pooling_stride_tokens,
     )
 
-    segmenter = _make_segmenter(
+    segmenter, coarse_segmenter = _make_segmenters(
         kind=args.segment,
         scorer_or_none=None if args.dummy else scorer,
         window_tokens=args.window_tokens,
         stride_tokens=args.stride_tokens,
         min_tokens=args.min_tokens,
+        chunk_tokens=args.chunk_tokens,
+        chunk_stride_tokens=args.chunk_stride_tokens,
+        chunk_min_tokens=args.chunk_min_tokens,
     )
 
-    fb = Fabula(scorer=scorer, segmenter=segmenter, analysis=args.analysis)
+    fb = Fabula(
+        scorer=scorer,
+        segmenter=segmenter,
+        coarse_segmenter=coarse_segmenter,
+        analysis=args.analysis,
+        chunk_weight=args.chunk_weight,
+        chunk_attention_tau=args.chunk_attention_tau,
+    )
     arc = fb.arc(
         text,
         n_points=args.n_points,
@@ -224,12 +285,25 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument("--device", default=None, help="cpu, cuda, cuda:0 (default: auto).")
         sp.add_argument("--batch-size", type=int, default=16, help="Batch size for inference.")
         sp.add_argument("--max-length", type=int, default=512, help="Max tokens per segment fed to the model.")
+        sp.add_argument("--pooling", choices=["none", "mean", "max", "attention"], default="none",
+                        help="Chunk-level pooling for long inputs (default: none).")
+        sp.add_argument("--pooling-stride-tokens", type=int, default=None,
+                        help="Stride for pooled chunking (default: max_length/4).")
 
-        sp.add_argument("--segment", choices=["sentence", "paragraph", "window"], default="sentence",
+        sp.add_argument("--segment", choices=["sentence", "paragraph", "window", "document"], default="sentence",
                         help="Segmentation strategy (default: sentence).")
         sp.add_argument("--window-tokens", type=int, default=256, help="Token window size (segment=window).")
         sp.add_argument("--stride-tokens", type=int, default=64, help="Token stride (segment=window).")
         sp.add_argument("--min-tokens", type=int, default=16, help="Min tokens for window segments.")
+        sp.add_argument("--chunk-tokens", type=int, default=1024, help="Chunk token size (segment=document).")
+        sp.add_argument("--chunk-stride-tokens", type=int, default=1024,
+                        help="Chunk stride (segment=document).")
+        sp.add_argument("--chunk-min-tokens", type=int, default=128,
+                        help="Min tokens for document chunks (segment=document).")
+        sp.add_argument("--chunk-weight", type=float, default=0.3,
+                        help="Interpolation weight for chunk scores (segment=document).")
+        sp.add_argument("--chunk-attention-tau", type=float, default=0.1,
+                        help="Attention pooling temperature for chunks (segment=document).")
 
     sp_score = sub.add_parser("score", help="Score segments and output per-segment data.")
     add_common(sp_score)
