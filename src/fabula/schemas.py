@@ -28,4 +28,5 @@ class ArcResult:
     y: List[float]       # smoothed scores
     raw_x: List[float]   # raw segment positions
     raw_y: List[float]   # raw segment scores
-
+    y_low: Optional[List[float]] = None   # lower CI bound if computed
+    y_high: Optional[List[float]] = None  # upper CI bound if computed

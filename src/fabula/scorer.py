@@ -15,8 +15,11 @@ class TransformersScorer:
     device: Optional[str] = None  # "cpu", "cuda", "cuda:0"
     batch_size: int = 16
     max_length: int = 512
+    temperature: float = 1.0
 
     def __post_init__(self):
+        if self.temperature <= 0:
+            raise ValueError("temperature must be > 0")
         try:
             import torch  # noqa: F401
             from transformers import AutoModelForSequenceClassification, AutoTokenizer  # noqa: F401
@@ -60,6 +63,7 @@ class TransformersScorer:
                 )
                 enc = {k: v.to(self.device) for k, v in enc.items()}
                 logits = self.model_obj(**enc).logits
+                logits = logits / float(self.temperature)
                 probs = torch.softmax(logits, dim=-1).detach().cpu().numpy()
 
                 for row in probs:
@@ -92,4 +96,3 @@ def valence_from_probs(probs: Dict[str, float]) -> Optional[float]:
         return get("positive") - get("negative")
 
     return None
-
