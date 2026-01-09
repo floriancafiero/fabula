@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+import math
+from typing import Any, Dict, Iterable, List, Optional
 
 import pandas as pd
 
@@ -17,13 +18,63 @@ _ANALYSIS_TYPES = {"sentiment", "emotion"}
 class Fabula:
     scorer: TransformersScorer
     segmenter: Any = None  # must implement .segment(text) -> List[Segment]
+    coarse_segmenter: Any = None  # optional chunk segmenter
     analysis: str = "sentiment"
+    chunk_weight: float = 0.3
+    chunk_attention_tau: float = 0.1
 
     def __post_init__(self):
         if self.segmenter is None:
             self.segmenter = RegexSentenceSegmenter()
         if self.analysis not in _ANALYSIS_TYPES:
             raise ValueError(f"Unknown analysis type: {self.analysis}")
+        if not 0.0 <= self.chunk_weight <= 1.0:
+            raise ValueError("chunk_weight must be in [0, 1].")
+        if self.chunk_attention_tau <= 0:
+            raise ValueError("chunk_attention_tau must be > 0.")
+
+    def _attention_pool_probs(
+        self,
+        probs_list: Iterable[Dict[str, float]],
+        positions: Iterable[float],
+        query_pos: float,
+    ) -> Dict[str, float]:
+        probs_list = list(probs_list)
+        positions = list(positions)
+        if not probs_list:
+            return {}
+
+        weights = []
+        for pos in positions:
+            dist = abs(query_pos - pos)
+            weights.append(math.exp(-dist / self.chunk_attention_tau))
+
+        norm = sum(weights) or 1.0
+        weights = [w / norm for w in weights]
+
+        pooled: Dict[str, float] = {}
+        for w, probs in zip(weights, probs_list):
+            for label, val in probs.items():
+                pooled[label] = pooled.get(label, 0.0) + w * float(val)
+        return pooled
+
+    def _blend_probs(
+        self,
+        fine: Dict[str, float],
+        coarse: Dict[str, float],
+    ) -> Dict[str, float]:
+        if not coarse:
+            return fine
+        if not fine:
+            return coarse
+        labels = set(fine) | set(coarse)
+        blend: Dict[str, float] = {}
+        for label in labels:
+            blend[label] = (
+                (1.0 - self.chunk_weight) * float(fine.get(label, 0.0))
+                + self.chunk_weight * float(coarse.get(label, 0.0))
+            )
+        return blend
 
     def _score_from_probs(self, probs: Dict[str, float]) -> Optional[float]:
         if self.analysis == "sentiment":
@@ -36,10 +87,27 @@ class Fabula:
         segs = self.segmenter.segment(text)
         probs_list = self.scorer.predict_proba([s.text for s in segs])
 
+        coarse_segs = []
+        coarse_probs_list: List[Dict[str, float]] = []
+        coarse_positions: List[float] = []
+        if self.coarse_segmenter is not None:
+            coarse_segs = self.coarse_segmenter.segment(text)
+            coarse_probs_list = self.scorer.predict_proba([s.text for s in coarse_segs])
+            coarse_positions = [c.rel_pos for c in coarse_segs]
+
         rows: List[Dict[str, Any]] = []
         for s, probs in zip(segs, probs_list):
-            label = max(probs.items(), key=lambda kv: kv[1])[0] if probs else ""
-            score = self._score_from_probs(probs)
+            pooled_probs: Dict[str, float] = {}
+            if coarse_segs:
+                pooled_probs = self._attention_pool_probs(
+                    coarse_probs_list,
+                    coarse_positions,
+                    s.rel_pos,
+                )
+
+            merged_probs = self._blend_probs(probs, pooled_probs)
+            label = max(merged_probs.items(), key=lambda kv: kv[1])[0] if merged_probs else ""
+            score = self._score_from_probs(merged_probs)
             rows.append(
                 {
                     "idx": s.idx,
@@ -47,7 +115,8 @@ class Fabula:
                     "text": s.text,
                     "label": label,
                     "score": score,
-                    "probs": probs,
+                    "probs": merged_probs,
+                    "chunk_probs": pooled_probs if pooled_probs else None,
                     "start_char": s.start_char,
                     "end_char": s.end_char,
                     "start_token": s.start_token,
