@@ -135,9 +135,9 @@ def _make_segmenters(
             stride_tokens=stride_tokens,
             min_tokens=min_tokens,
         ), None
-    if kind == "document":
+    if kind == "in-context":
         if scorer_or_none is None or getattr(scorer_or_none, "tokenizer", None) is None:
-            raise ValueError("Document chunking requires a transformers tokenizer (disable --dummy).")
+            raise ValueError("In-context chunking requires a transformers tokenizer (disable --dummy).")
         return RegexSentenceSegmenter(), DocumentChunkTokenSegmenter(
             tokenizer=scorer_or_none.tokenizer,
             chunk_tokens=chunk_tokens,
@@ -328,20 +328,20 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument("--pooling-stride-tokens", type=int, default=None,
                         help="Stride for pooled chunking (default: max_length/4).")
 
-        sp.add_argument("--segment", choices=["sentence", "paragraph", "window", "document"], default="sentence",
+        sp.add_argument("--segment", choices=["sentence", "paragraph", "window", "in-context"], default="sentence",
                         help="Segmentation strategy (default: sentence).")
         sp.add_argument("--window-tokens", type=int, default=256, help="Token window size (segment=window).")
         sp.add_argument("--stride-tokens", type=int, default=64, help="Token stride (segment=window).")
         sp.add_argument("--min-tokens", type=int, default=16, help="Min tokens for window segments.")
-        sp.add_argument("--chunk-tokens", type=int, default=1024, help="Chunk token size (segment=document).")
+        sp.add_argument("--chunk-tokens", type=int, default=1024, help="Chunk token size (segment=in-context).")
         sp.add_argument("--chunk-stride-tokens", type=int, default=1024,
-                        help="Chunk stride (segment=document).")
+                        help="Chunk stride (segment=in-context).")
         sp.add_argument("--chunk-min-tokens", type=int, default=128,
-                        help="Min tokens for document chunks (segment=document).")
+                        help="Min tokens for in-context chunks (segment=in-context).")
         sp.add_argument("--chunk-weight", type=float, default=0.3,
-                        help="Interpolation weight for chunk scores (segment=document).")
+                        help="Interpolation weight for chunk scores (segment=in-context).")
         sp.add_argument("--chunk-attention-tau", type=float, default=0.1,
-                        help="Attention pooling temperature for chunks (segment=document).")
+                        help="Attention pooling temperature for chunks (segment=in-context).")
         sp.add_argument("--explain-tokens", action="store_true",
                         help="Include token-level importance scores in score output.")
         sp.add_argument("--explain-top-k", type=int, default=None,

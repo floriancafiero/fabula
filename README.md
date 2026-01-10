@@ -7,8 +7,8 @@ Fabula is a Python package for analyzing how sentiment or emotions evolve across
 ## Key capabilities
 
 - **Per-segment scoring** for sentiment or emotion analysis.
-- **Multiple segmentation strategies** (sentence, paragraph, token windows, document chunks).
-- **Long-input handling** with chunk pooling and document-level interpolation.
+- **Multiple segmentation strategies** (sentence, paragraph, token windows, in-context chunks).
+- **Long-input handling** with chunk pooling and in-context interpolation.
 - **Narrative arc generation** with resampling + smoothing.
 - **CLI and Python API** for batch runs and scripting.
 
@@ -114,13 +114,13 @@ Uses the tokenizer to create overlapping windows. Requires a Transformers tokeni
 fabula score my.txt --segment window --window-tokens 256 --stride-tokens 64 --min-tokens 16
 ```
 
-### 4) Document chunking + interpolation
+### 4) In-context chunking + interpolation
 
 Scores sentences *and* coarse chunks, then blends their probabilities to preserve long-range context. Requires a tokenizer with offset mappings.
 
 ```bash
 fabula score my.txt \
-  --segment document \
+  --segment in-context \
   --chunk-tokens 1024 \
   --chunk-stride-tokens 1024 \
   --chunk-min-tokens 128 \
@@ -248,9 +248,9 @@ Each row includes:
 - `label`: top predicted label
 - `score`: scalar score for arcs
 - `probs`: full label distribution
-- `chunk_probs`: pooled chunk distribution (document mode only)
+- `chunk_probs`: pooled chunk distribution (in-context mode only)
 - `start_char`, `end_char`: character offsets (when available)
-- `start_token`, `end_token`: token offsets (window/document modes)
+- `start_token`, `end_token`: token offsets (window/in-context modes)
 
 ### `fabula arc`
 
@@ -279,9 +279,9 @@ The CLI has two subcommands: `score` and `arc`. Both share common options.
 - `--max-length`: max tokens per segment
 - `--pooling`: `none`, `mean`, `max`, `attention`
 - `--pooling-stride-tokens`: stride for pooled chunking (defaults to `max_length/4`)
-- `--segment`: `sentence`, `paragraph`, `window`, `document`
+- `--segment`: `sentence`, `paragraph`, `window`, `in-context`
 - `--window-tokens`, `--stride-tokens`, `--min-tokens`: window segmentation controls
-- `--chunk-tokens`, `--chunk-stride-tokens`, `--chunk-min-tokens`: document chunking controls
+- `--chunk-tokens`, `--chunk-stride-tokens`, `--chunk-min-tokens`: in-context chunking controls
 - `--chunk-weight`: interpolation weight for chunk scores
 - `--chunk-attention-tau`: attention pooling temperature for chunk scores
 
@@ -356,7 +356,7 @@ fabula arc my.txt --analysis emotion --score-col probs --format csv
 ### Long document, fewer API calls
 
 ```bash
-fabula score my.txt --segment document --chunk-tokens 2048 --chunk-weight 0.4
+fabula score my.txt --segment in-context --chunk-tokens 2048 --chunk-weight 0.4
 ```
 
 ### Smoke-test without downloading models
@@ -368,8 +368,8 @@ fabula score my.txt --dummy --analysis sentiment
 ## Notes & limitations
 
 - The default models are French. For other languages, pass a different Hugging Face model.
-- `window` and `document` segmentation require a Transformers tokenizer (disable `--dummy`).
-- `document` segmentation requires a tokenizer that returns offset mappings.
+- `window` and `in-context` segmentation require a Transformers tokenizer (disable `--dummy`).
+- `in-context` segmentation requires a tokenizer that returns offset mappings.
 - `score` outputs `score=None` when the model labels do not support valence; `arc` can fall back to max probability unless disabled.
 
 ## License
