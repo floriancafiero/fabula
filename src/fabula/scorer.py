@@ -151,8 +151,6 @@ class TransformersScorer:
             text,
             return_offsets_mapping=True,
             add_special_tokens=True,
-            truncation=True,
-            max_length=self.max_length,
         )
         offsets = enc.get("offset_mapping", [])
         input_ids = enc.get("input_ids", [])
