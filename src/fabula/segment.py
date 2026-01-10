@@ -172,7 +172,7 @@ class DocumentChunkTokenSegmenter:
         input_ids: Sequence[int] = enc["input_ids"]
         offsets = enc.get("offset_mapping")
         if offsets is None:
-            raise ValueError("Tokenizer must provide offsets for document chunking.")
+            raise ValueError("Tokenizer must provide offsets for in-context chunking.")
 
         n_tokens = len(input_ids)
         if n_tokens == 0:
