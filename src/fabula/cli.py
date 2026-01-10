@@ -246,21 +246,14 @@ def cmd_arc(args: argparse.Namespace) -> int:
     _write_text(args.output, content)
 
     if args.plot is not None:
-        try:
-            import matplotlib.pyplot as plt
-        except Exception as e:
-            raise ImportError("Plotting requires matplotlib (pip install fabula[plot]).") from e
+        from .plot import plot_arc
 
-        plt.figure()
-        plt.plot(arc.x, arc.y)
-        plt.xlabel("Relative position")
-        plt.ylabel("Score")
-        plt.title("Fabula arc")
-
-        if args.plot == "-":
-            plt.show()
-        else:
-            plt.savefig(args.plot, bbox_inches="tight")
+        plot_arc(
+            arc,
+            raw_points=args.plot_raw,
+            show=args.plot == "-",
+            save_path=None if args.plot == "-" else args.plot,
+        )
 
     return 0
 
@@ -338,6 +331,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Disable fallback scalar using max(prob) when score is missing.")
     sp_arc.add_argument("--plot", default=None,
                         help="Plot to a file (e.g., arc.png) or '-' to display interactively (requires matplotlib).")
+    sp_arc.add_argument("--plot-raw", action="store_true",
+                        help="Plot raw segment scores as points (requires --plot).")
     sp_arc.set_defaults(func=cmd_arc)
 
     return p
