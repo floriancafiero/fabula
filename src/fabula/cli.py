@@ -263,14 +263,26 @@ def cmd_arc(args: argparse.Namespace) -> int:
     _write_text(args.output, content)
 
     if args.plot is not None:
-        from .plot import plot_arc
+        if arc.y_series is not None:
+            if args.plot_raw:
+                raise ValueError("plotting raw points is only supported for scalar arcs.")
+            from .plot import plot_arc_series
 
-        plot_arc(
-            arc,
-            raw_points=args.plot_raw,
-            show=args.plot == "-",
-            save_path=None if args.plot == "-" else args.plot,
-        )
+            plot_arc_series(
+                arc,
+                show=args.plot == "-",
+                save_path=None if args.plot == "-" else args.plot,
+                legend_title="Emotions" if args.analysis == "emotion" else "Series",
+            )
+        else:
+            from .plot import plot_arc
+
+            plot_arc(
+                arc,
+                raw_points=args.plot_raw,
+                show=args.plot == "-",
+                save_path=None if args.plot == "-" else args.plot,
+            )
 
     return 0
 

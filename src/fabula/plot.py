@@ -104,3 +104,62 @@ def plot_arc(
         plt.show()
 
     return fig, ax
+
+
+def plot_arc_series(
+    arc: ArcResult,
+    *,
+    title: str = "Fabula arc",
+    subtitle: Optional[str] = None,
+    xlabel: str = "Relative position",
+    ylabel: str = "Score",
+    figure_size: Tuple[float, float] = (9.0, 5.5),
+    line_width: float = 2.0,
+    legend_title: Optional[str] = "Series",
+    save_path: Optional[str] = None,
+    show: bool = False,
+):
+    """Plot a multi-dimensional narrative arc as multiple lines."""
+    import matplotlib.pyplot as plt
+
+    if arc.y_series is None:
+        raise ValueError("plot_arc_series requires arc.y_series to be populated.")
+
+    fig, ax = plt.subplots(figsize=figure_size)
+    for label in sorted(arc.y_series):
+        ax.plot(arc.x, arc.y_series[label], linewidth=line_width, label=label)
+
+    ax.set_xlim(0.0, 1.0)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title, loc="left", fontweight="bold")
+
+    if subtitle:
+        ax.text(
+            0.0,
+            1.02,
+            subtitle,
+            transform=ax.transAxes,
+            ha="left",
+            va="bottom",
+            fontsize=10,
+            color="#4D4D4D",
+        )
+
+    ax.grid(axis="y", alpha=0.25, linestyle="-")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    if legend_title:
+        ax.legend(frameon=False, loc="upper right", title=legend_title)
+    else:
+        ax.legend(frameon=False, loc="upper right")
+
+    fig.tight_layout()
+
+    if save_path:
+        fig.savefig(save_path, bbox_inches="tight")
+    if show:
+        plt.show()
+
+    return fig, ax
