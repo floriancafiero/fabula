@@ -20,25 +20,7 @@ Base install:
 pip install fabula
 ```
 
-Transformers support (required for real models):
-
-```bash
-pip install fabula[transformers]
-```
-
-Some Hugging Face models require SentencePiece:
-
-```bash
-pip install fabula[transformers-sp]
-# or
-pip install sentencepiece
-```
-
-Optional plotting support:
-
-```bash
-pip install fabula[plot]
-```
+Base install includes Transformers + Torch for model inference, plus SentencePiece and matplotlib.
 
 ## Quickstart
 
