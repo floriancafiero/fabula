@@ -83,7 +83,48 @@ class Fabula:
             return max(probs.values()) if probs else None
         raise ValueError(f"Unknown analysis type: {self.analysis}")
 
-    def score(self, text: str) -> pd.DataFrame:
+    def _interpret_probs(
+        self, probs: Dict[str, float]
+    ) -> Dict[str, Optional[float] | Optional[str]]:
+        if not probs:
+            return {
+                "top_label": None,
+                "top_prob": None,
+                "second_label": None,
+                "second_prob": None,
+                "margin": None,
+                "entropy": None,
+            }
+        ranked = sorted(probs.items(), key=lambda kv: kv[1], reverse=True)
+        top_label, top_prob = ranked[0]
+        second_label, second_prob = (None, None)
+        if len(ranked) > 1:
+            second_label, second_prob = ranked[1]
+        margin = None
+        if top_prob is not None and second_prob is not None:
+            margin = float(top_prob) - float(second_prob)
+        entropy = -sum(
+            float(p) * math.log(float(p))
+            for _, p in ranked
+            if float(p) > 0.0
+        )
+        return {
+            "top_label": top_label,
+            "top_prob": float(top_prob),
+            "second_label": second_label,
+            "second_prob": float(second_prob) if second_prob is not None else None,
+            "margin": margin,
+            "entropy": entropy,
+        }
+
+    def score(
+        self,
+        text: str,
+        explain_tokens: bool = False,
+        explain_top_k: Optional[int] = None,
+        explain_max_tokens: Optional[int] = None,
+        explain_stride: Optional[int] = None,
+    ) -> pd.DataFrame:
         segs = self.segmenter.segment(text)
         probs_list = self.scorer.predict_proba([s.text for s in segs])
 
@@ -108,21 +149,39 @@ class Fabula:
             merged_probs = self._blend_probs(probs, pooled_probs)
             label = max(merged_probs.items(), key=lambda kv: kv[1])[0] if merged_probs else ""
             score = self._score_from_probs(merged_probs)
-            rows.append(
-                {
-                    "idx": s.idx,
-                    "rel_pos": float(s.rel_pos),
-                    "text": s.text,
-                    "label": label,
-                    "score": score,
-                    "probs": merged_probs,
-                    "chunk_probs": pooled_probs if pooled_probs else None,
-                    "start_char": s.start_char,
-                    "end_char": s.end_char,
-                    "start_token": s.start_token,
-                    "end_token": s.end_token,
-                }
-            )
+            interp = self._interpret_probs(merged_probs)
+            row = {
+                "idx": s.idx,
+                "rel_pos": float(s.rel_pos),
+                "text": s.text,
+                "label": label,
+                "score": score,
+                "probs": merged_probs,
+                "top_label": interp["top_label"],
+                "top_prob": interp["top_prob"],
+                "second_label": interp["second_label"],
+                "second_prob": interp["second_prob"],
+                "margin": interp["margin"],
+                "entropy": interp["entropy"],
+                "chunk_probs": pooled_probs if pooled_probs else None,
+                "start_char": s.start_char,
+                "end_char": s.end_char,
+                "start_token": s.start_token,
+                "end_token": s.end_token,
+            }
+
+            if explain_tokens:
+                if not hasattr(self.scorer, "explain_tokens"):
+                    raise ValueError("Token explanations require a scorer with explain_tokens().")
+                row["token_importance"] = self.scorer.explain_tokens(
+                    s.text,
+                    target_label=label or None,
+                    top_k=explain_top_k,
+                    max_tokens=explain_max_tokens,
+                    stride=explain_stride,
+                )
+
+            rows.append(row)
 
         return pd.DataFrame(rows)
 
