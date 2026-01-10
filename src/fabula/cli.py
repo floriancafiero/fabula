@@ -48,6 +48,16 @@ class DummyScorer:
                     out.append({"POSITIVE": 0.7, "NEGATIVE": 0.3})
         return out
 
+    def explain_tokens(
+        self,
+        text: str,
+        target_label: Optional[str] = None,
+        top_k: Optional[int] = None,
+        max_tokens: Optional[int] = None,
+        stride: Optional[int] = None,
+    ) -> List[Dict[str, object]]:
+        return []
+
 
 def _read_text(input_path: str, encoding: str = "utf-8") -> str:
     if input_path == "-":
@@ -175,7 +185,13 @@ def cmd_score(args: argparse.Namespace) -> int:
         chunk_weight=args.chunk_weight,
         chunk_attention_tau=args.chunk_attention_tau,
     )
-    df = fb.score(text)
+    df = fb.score(
+        text,
+        explain_tokens=args.explain_tokens,
+        explain_top_k=args.explain_top_k,
+        explain_max_tokens=args.explain_max_tokens,
+        explain_stride=args.explain_stride,
+    )
 
     fmt = args.format.lower()
     if fmt == "csv":
@@ -326,6 +342,14 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Interpolation weight for chunk scores (segment=document).")
         sp.add_argument("--chunk-attention-tau", type=float, default=0.1,
                         help="Attention pooling temperature for chunks (segment=document).")
+        sp.add_argument("--explain-tokens", action="store_true",
+                        help="Include token-level importance scores in score output.")
+        sp.add_argument("--explain-top-k", type=int, default=None,
+                        help="Limit token explanations to top-k by absolute impact (requires --explain-tokens).")
+        sp.add_argument("--explain-max-tokens", type=int, default=None,
+                        help="Sample at most N tokens for explanation (requires --explain-tokens).")
+        sp.add_argument("--explain-stride", type=int, default=None,
+                        help="Sample every Nth token for explanation (requires --explain-tokens).")
 
     sp_score = sub.add_parser("score", help="Score segments and output per-segment data.")
     add_common(sp_score)
