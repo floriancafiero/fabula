@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Dict, Iterable, List, Optional, Sequence
 
 
@@ -134,6 +135,74 @@ class TransformersScorer:
                     results.append(self._row_to_dict(row))
 
         return results
+
+    def explain_tokens(
+        self,
+        text: str,
+        target_label: Optional[str] = None,
+        top_k: Optional[int] = None,
+        max_tokens: Optional[int] = None,
+        stride: Optional[int] = None,
+    ) -> List[Dict[str, object]]:
+        if not text:
+            return []
+
+        enc = self.tokenizer(
+            text,
+            return_offsets_mapping=True,
+            add_special_tokens=True,
+            truncation=True,
+            max_length=self.max_length,
+        )
+        offsets = enc.get("offset_mapping", [])
+        input_ids = enc.get("input_ids", [])
+        if not offsets or not input_ids:
+            return []
+
+        tokens = self.tokenizer.convert_ids_to_tokens(input_ids)
+        base_probs = self.predict_proba([text])[0]
+        if not base_probs:
+            return []
+
+        if target_label is None:
+            target_label = max(base_probs.items(), key=lambda kv: kv[1])[0]
+
+        base_prob = float(base_probs.get(target_label, 0.0))
+
+        candidates = []
+        for token, (start, end) in zip(tokens, offsets):
+            if start is None or end is None or start == end:
+                continue
+            candidates.append((token, int(start), int(end)))
+
+        if not candidates:
+            return []
+
+        if stride is not None and stride > 1:
+            candidates = candidates[::stride]
+        if max_tokens is not None and max_tokens > 0 and len(candidates) > max_tokens:
+            step = max(1, math.ceil(len(candidates) / max_tokens))
+            candidates = candidates[::step]
+
+        texts = [text[:start] + text[end:] for _, start, end in candidates]
+        alt_probs = self.predict_proba(texts)
+
+        impacts = []
+        for (token, start, end), probs in zip(candidates, alt_probs):
+            new_prob = float(probs.get(target_label, 0.0)) if probs else 0.0
+            impacts.append(
+                {
+                    "token": token,
+                    "start_char": start,
+                    "end_char": end,
+                    "delta": base_prob - new_prob,
+                }
+            )
+
+        impacts.sort(key=lambda item: abs(float(item["delta"])), reverse=True)
+        if top_k is not None:
+            impacts = impacts[:max(0, int(top_k))]
+        return impacts
 
 
 def valence_from_probs(probs: Dict[str, float]) -> Optional[float]:
