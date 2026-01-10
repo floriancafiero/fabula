@@ -223,6 +223,10 @@ def cmd_arc(args: argparse.Namespace) -> int:
         chunk_weight=args.chunk_weight,
         chunk_attention_tau=args.chunk_attention_tau,
     )
+    score_cols = None
+    if args.score_cols:
+        score_cols = [c.strip() for c in args.score_cols.split(",") if c.strip()]
+
     arc = fb.arc(
         text,
         n_points=args.n_points,
@@ -231,29 +235,54 @@ def cmd_arc(args: argparse.Namespace) -> int:
         smooth_sigma=args.smooth_sigma,
         smooth_pad_mode=args.smooth_pad_mode,
         score_col=args.score_col,
+        score_cols=score_cols,
         fallback_to_maxprob=args.fallback_to_maxprob,
     )
 
     fmt = args.format.lower()
     if fmt == "csv":
-        out_df = pd.DataFrame({"x": arc.x, "y": arc.y})
+        if arc.y_series is not None:
+            out_df = pd.DataFrame({"x": arc.x, **arc.y_series})
+        else:
+            out_df = pd.DataFrame({"x": arc.x, "y": arc.y})
         content = out_df.to_csv(index=False)
     elif fmt == "json":
-        content = json.dumps({"x": arc.x, "y": arc.y, "raw_x": arc.raw_x, "raw_y": arc.raw_y}, ensure_ascii=False)
+        if arc.y_series is not None:
+            payload = {
+                "x": arc.x,
+                "y_series": arc.y_series,
+                "raw_x": arc.raw_x,
+                "raw_y_series": arc.raw_y_series,
+            }
+        else:
+            payload = {"x": arc.x, "y": arc.y, "raw_x": arc.raw_x, "raw_y": arc.raw_y}
+        content = json.dumps(payload, ensure_ascii=False)
     else:
         raise ValueError(f"Unsupported format: {args.format}")
 
     _write_text(args.output, content)
 
     if args.plot is not None:
-        from .plot import plot_arc
+        if arc.y_series is not None:
+            if args.plot_raw:
+                raise ValueError("plotting raw points is only supported for scalar arcs.")
+            from .plot import plot_arc_series
 
-        plot_arc(
-            arc,
-            raw_points=args.plot_raw,
-            show=args.plot == "-",
-            save_path=None if args.plot == "-" else args.plot,
-        )
+            plot_arc_series(
+                arc,
+                show=args.plot == "-",
+                save_path=None if args.plot == "-" else args.plot,
+                legend_title="Emotions" if args.analysis == "emotion" else "Series",
+            )
+        else:
+            from .plot import plot_arc
+
+            plot_arc(
+                arc,
+                raw_points=args.plot_raw,
+                show=args.plot == "-",
+                save_path=None if args.plot == "-" else args.plot,
+            )
 
     return 0
 
@@ -326,7 +355,10 @@ def build_parser() -> argparse.ArgumentParser:
         default="reflect",
         help="Padding mode for smoothing (default: reflect).",
     )
-    sp_arc.add_argument("--score-col", default="score", help="Column to use as scalar score.")
+    sp_arc.add_argument("--score-col", default="score",
+                        help="Column to use as scalar score (or 'probs' for per-label arcs).")
+    sp_arc.add_argument("--score-cols", default=None,
+                        help="Comma-separated columns for vector arcs (overrides --score-col).")
     sp_arc.add_argument("--no-fallback-to-maxprob", dest="fallback_to_maxprob", action="store_false",
                         help="Disable fallback scalar using max(prob) when score is missing.")
     sp_arc.add_argument("--plot", default=None,

@@ -53,6 +53,16 @@ def test_fabula_emotion_scores():
     assert df["score"].iloc[0] == 0.8
 
 
+def test_fabula_emotion_arc_series():
+    f = Fabula(scorer=EmotionDummyScorer(), analysis="emotion")
+    arc = f.arc("Bonjour. Triste.", n_points=5, smooth_window=1, score_col="probs")
+    assert arc.y is None
+    assert arc.y_series is not None
+    assert set(arc.y_series) == {"JOIE", "TRISTESSE"}
+    assert len(arc.x) == 5
+    assert len(arc.y_series["JOIE"]) == 5
+
+
 def test_fabula_chunk_blending():
     fine_segments = [
         Segment(idx=0, text="fine one", rel_pos=0.1),

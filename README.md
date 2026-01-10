@@ -47,6 +47,7 @@ pip install fabula[plot]
 ```python
 from fabula.core import Fabula
 from fabula.scorer import TransformersScorer
+from fabula.plot import plot_arc_series
 
 scorer = TransformersScorer(model="cmarkea/distilcamembert-base-sentiment")
 fb = Fabula(scorer=scorer)
@@ -58,6 +59,11 @@ print(scores[["rel_pos", "label", "score"]])
 # Narrative arc
 arc = fb.arc("Bonjour. C'est une belle journée.", n_points=50)
 print(arc.x[:5], arc.y[:5])
+
+# Multi-dimensional emotion arc (per-label probabilities)
+fb_emotion = Fabula(scorer=TransformersScorer(model="astrosbd/french_emotion_camembert"), analysis="emotion")
+emotion_arc = fb_emotion.arc("Bonjour. Quelle surprise.", score_col="probs")
+plot_arc_series(emotion_arc, title="Emotions across the story", legend_title="Emotions")
 ```
 
 ### CLI
@@ -72,6 +78,12 @@ Compute a narrative arc:
 
 ```bash
 fabula arc my.txt --n-points 100 --smooth-window 9
+```
+
+Compute a multi-dimensional emotion arc (one column per label):
+
+```bash
+fabula arc my.txt --analysis emotion --score-col probs --format csv
 ```
 
 ## Models and analysis types
@@ -169,10 +181,56 @@ fabula arc my.txt \
   --smooth-pad-mode reflect
 ```
 
+### Multi-dimensional arcs (emotion or multi-label scores)
+
+If your segments include **multiple labels** (e.g., emotions), Fabula can emit
+**one arc per label** instead of collapsing everything into a single scalar.
+
+Two ways to request vector arcs:
+
+1. **Per-label probabilities** from the `probs` column:
+
+```bash
+fabula arc my.txt --analysis emotion --score-col probs --format csv
+```
+
+This produces a CSV like:
+
+```
+x,JOIE,TRISTESSE,PEUR,SURPRISE
+0.0,0.12,0.55,0.07,0.26
+0.01,0.15,0.52,0.06,0.27
+...
+```
+
+2. **Explicit columns** using `--score-cols` (comma-separated). This is useful
+if you already have multiple numeric columns in your scoring output and want
+independent arcs for each:
+
+```bash
+fabula arc my.txt --score-cols valence,arousal,dominance
+```
+
+### Plotting multi-dimensional arcs
+
+The scalar plot function fills under a single curve. For multi-dimensional arcs,
+use `plot_arc_series` to get multiple lines and a legend:
+
+```python
+from fabula import Fabula, plot_arc_series
+from fabula.scorer import TransformersScorer
+
+fb = Fabula(scorer=TransformersScorer(model="astrosbd/french_emotion_camembert"), analysis="emotion")
+arc = fb.arc("Bonjour. Quelle surprise.", score_col="probs")
+plot_arc_series(arc, title="Smoothed Evolution of Emotions", legend_title="Emotions")
+```
+
 ### Plotting
 
 The CLI can optionally plot the arc if matplotlib is installed. For quick teaching visuals,
 use `--plot-raw` to show the underlying segment scores alongside the smoothed curve.
+For multi-dimensional arcs (e.g., `--score-col probs`), the CLI will draw multiple lines
+with a legend instead of a filled scalar curve.
 
 ```bash
 fabula arc my.txt --plot arc.png
@@ -216,10 +274,11 @@ Each row includes:
 
 Formats:
 
-- `csv` (default): `x`, `y`
-- `json`: `x`, `y`, `raw_x`, `raw_y`
+- `csv` (default): `x`, `y` for scalar arcs, or `x` + one column per label for vector arcs
+- `json`: scalar arcs include `x`, `y`, `raw_x`, `raw_y`; vector arcs include `x`, `y_series`, `raw_x`, `raw_y_series`
 
-`raw_x` and `raw_y` are the original segment positions and scores before resampling/smoothing.
+`raw_x` and `raw_y` are the original segment positions and scores before resampling/smoothing. For vector arcs,
+the `*_series` fields store one list per label.
 
 ## CLI reference
 
@@ -256,7 +315,8 @@ The CLI has two subcommands: `score` and `arc`. Both share common options.
 - `--smooth-method`: `moving_average`, `gaussian`, or `none`
 - `--smooth-sigma`: gaussian sigma (defaults to `window/6`)
 - `--smooth-pad-mode`: `reflect`, `edge`, or `constant`
-- `--score-col`: column to use as scalar score (default: `score`)
+- `--score-col`: column to use as scalar score (default: `score`; use `probs` for per-label arcs)
+- `--score-cols`: comma-separated columns for vector arcs (overrides `--score-col`)
 - `--no-fallback-to-maxprob`: disable fallback score for missing scalar values
 - `--plot`: output file path or `-` to display
 
@@ -278,7 +338,7 @@ Fabula(
 Methods:
 
 - `score(text) -> pandas.DataFrame`
-- `arc(text, n_points=100, smooth_window=7, smooth_method="moving_average", smooth_sigma=None, smooth_pad_mode="reflect", score_col="score", fallback_to_maxprob=True) -> ArcResult`
+- `arc(text, n_points=100, smooth_window=7, smooth_method="moving_average", smooth_sigma=None, smooth_pad_mode="reflect", score_col="score", score_cols=None, fallback_to_maxprob=True) -> ArcResult`
 
 ### Segmenters
 
@@ -303,6 +363,12 @@ fabula arc my.txt --analysis sentiment --n-points 100
 
 ```bash
 fabula arc my.txt --analysis emotion --model astrosbd/french_emotion_camembert
+```
+
+### Emotion arc as multi-column CSV
+
+```bash
+fabula arc my.txt --analysis emotion --score-col probs --format csv
 ```
 
 ### Long document, fewer API calls
