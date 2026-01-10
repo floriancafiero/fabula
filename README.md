@@ -171,12 +171,23 @@ fabula arc my.txt \
 
 ### Plotting
 
-The CLI can optionally plot the arc if matplotlib is installed.
+The CLI can optionally plot the arc if matplotlib is installed. For quick teaching visuals,
+use `--plot-raw` to show the underlying segment scores alongside the smoothed curve.
 
 ```bash
 fabula arc my.txt --plot arc.png
 # or show interactively
 fabula arc my.txt --plot -
+fabula arc my.txt --plot arc.png --plot-raw
+```
+
+You can also create plots programmatically:
+
+```python
+from fabula import Fabula, plot_arc
+
+arc = Fabula().arc(\"...\")
+plot_arc(arc, subtitle=\"Chapter 1: Opening scene\", raw_points=True, save_path=\"arc.png\")
 ```
 
 ## Output formats
