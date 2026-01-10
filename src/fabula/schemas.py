@@ -25,7 +25,8 @@ class ScoredSegment(Segment):
 @dataclass(frozen=True)
 class ArcResult:
     x: List[float]       # resampled positions in [0, 1]
-    y: List[float]       # smoothed scores
+    y: Optional[List[float]]  # smoothed scalar scores
     raw_x: List[float]   # raw segment positions
-    raw_y: List[float]   # raw segment scores
-
+    raw_y: Optional[List[float]]  # raw scalar segment scores
+    y_series: Optional[Dict[str, List[float]]] = None  # smoothed vector scores
+    raw_y_series: Optional[Dict[str, List[float]]] = None  # raw vector scores
