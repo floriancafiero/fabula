@@ -52,6 +52,9 @@ def plot_arc(
     import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(figsize=figure_size)
+    if arc.y is None:
+        raise ValueError("plot_arc only supports scalar arcs. Use arc.y_series for multi-dimensional output.")
+
     ax.plot(arc.x, arc.y, color=line_color, linewidth=2.5)
     ax.fill_between(arc.x, arc.y, 0.0, color=fill_color, alpha=0.75)
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 import pandas as pd
 
@@ -135,11 +135,72 @@ class Fabula:
         smooth_sigma: Optional[float] = None,
         smooth_pad_mode: str = "reflect",
         score_col: str = "score",
+        score_cols: Optional[Sequence[str]] = None,
         fallback_to_maxprob: bool = True,
     ) -> ArcResult:
         df = self.score(text)
 
         raw_x = df["rel_pos"].astype(float).tolist()
+        if score_cols:
+            missing = [col for col in score_cols if col not in df.columns]
+            if missing:
+                raise ValueError(f"Missing columns: {', '.join(missing)}")
+            raw_y_series = {
+                col: df[col].astype(float).tolist()
+                for col in score_cols
+            }
+            y_series = {}
+            x_rs: List[float] = []
+            for col, raw_vals in raw_y_series.items():
+                x_rs, y_rs = resample_to_n(raw_x, raw_vals, n_points=n_points)
+                y_series[col] = smooth_series(
+                    y_rs,
+                    method=smooth_method,
+                    window=smooth_window,
+                    sigma=smooth_sigma,
+                    pad_mode=smooth_pad_mode,
+                )
+            return ArcResult(
+                x=x_rs,
+                y=None,
+                raw_x=raw_x,
+                raw_y=None,
+                y_series=y_series,
+                raw_y_series=raw_y_series,
+            )
+
+        if score_col == "probs":
+            probs_list = df["probs"].tolist()
+            labels = sorted(
+                {label for p in probs_list if isinstance(p, dict) for label in p}
+            )
+            raw_y_series = {
+                label: [
+                    float(p.get(label, 0.0)) if isinstance(p, dict) else float("nan")
+                    for p in probs_list
+                ]
+                for label in labels
+            }
+            y_series = {}
+            x_rs = []
+            for label, raw_vals in raw_y_series.items():
+                x_rs, y_rs = resample_to_n(raw_x, raw_vals, n_points=n_points)
+                y_series[label] = smooth_series(
+                    y_rs,
+                    method=smooth_method,
+                    window=smooth_window,
+                    sigma=smooth_sigma,
+                    pad_mode=smooth_pad_mode,
+                )
+            return ArcResult(
+                x=x_rs,
+                y=None,
+                raw_x=raw_x,
+                raw_y=None,
+                y_series=y_series,
+                raw_y_series=raw_y_series,
+            )
+
         if score_col not in df.columns:
             raise ValueError(f"Missing column: {score_col}")
 
