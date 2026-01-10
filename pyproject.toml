@@ -13,13 +13,14 @@ authors = [{ name = "Florian Cafiero and Alexandre Lionnet" }]
 dependencies = [
   "numpy",
   "pandas",
+  "matplotlib",
+  "sentencepiece",
+  "transformers>=4.40",
+  "torch",
 ]
 
 [project.optional-dependencies]
-transformers = ["transformers>=4.40", "torch"]
-transformers-sp = ["transformers>=4.40", "torch", "sentencepiece"]
 dev = ["pytest>=7", "ruff>=0.5"]
-plot = ["matplotlib"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/fabula"]
