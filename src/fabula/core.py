@@ -9,7 +9,11 @@ import pandas as pd
 from .arc import resample_to_n, smooth_series
 from .schemas import ArcResult
 from .scorer import TransformersScorer, valence_from_probs
-from .segment import RegexSentenceSegmenter
+from .segment import (
+    RegexSentenceSegmenter,
+    SlidingWindowTokenSegmenter,
+    DocumentChunkTokenSegmenter,
+)
 
 _ANALYSIS_TYPES = {"sentiment", "emotion"}
 
@@ -22,6 +26,7 @@ class Fabula:
     analysis: str = "sentiment"
     chunk_weight: float = 0.3
     chunk_attention_tau: float = 0.1
+    verbose: bool = False
 
     def __post_init__(self):
         if self.segmenter is None:
@@ -32,6 +37,32 @@ class Fabula:
             raise ValueError("chunk_weight must be in [0, 1].")
         if self.chunk_attention_tau <= 0:
             raise ValueError("chunk_attention_tau must be > 0.")
+
+        # Configure tokenizer and verbose for segmenters
+        self._configure_segmenter_tokenizer(self.segmenter)
+        self._configure_segmenter_verbose(self.segmenter)
+        if self.coarse_segmenter is not None:
+            self._configure_segmenter_tokenizer(self.coarse_segmenter)
+            self._configure_segmenter_verbose(self.coarse_segmenter)
+
+    def _configure_segmenter_tokenizer(self, segmenter: Any) -> None:
+        """Configure tokenizer for token-based segmenters if not already set."""
+        if isinstance(segmenter, (SlidingWindowTokenSegmenter, DocumentChunkTokenSegmenter)):
+            if segmenter.tokenizer is None:
+                if hasattr(self.scorer, 'tokenizer'):
+                    segmenter.tokenizer = self.scorer.tokenizer
+                    if self.verbose:
+                        print(f"[Fabula] Configured tokenizer for {type(segmenter).__name__} from scorer.")
+                else:
+                    raise ValueError(
+                        f"{type(segmenter).__name__} requires a tokenizer, but the scorer "
+                        "does not provide one. Please provide a tokenizer explicitly."
+                    )
+
+    def _configure_segmenter_verbose(self, segmenter: Any) -> None:
+        """Propagate verbose setting to segmenters if they support it."""
+        if hasattr(segmenter, 'verbose'):
+            segmenter.verbose = self.verbose
 
     def _attention_pool_probs(
         self,
@@ -125,15 +156,30 @@ class Fabula:
         explain_max_tokens: Optional[int] = None,
         explain_stride: Optional[int] = None,
     ) -> pd.DataFrame:
+        if self.verbose:
+            print(f"[Fabula] Starting scoring with {type(self.segmenter).__name__}")
+            print(f"[Fabula] Text length: {len(text)} characters")
+
         segs = self.segmenter.segment(text)
+        if self.verbose:
+            print(f"[Fabula] Created {len(segs)} segments")
+
         probs_list = self.scorer.predict_proba([s.text for s in segs])
+        if self.verbose:
+            print(f"[Fabula] Computed probabilities for {len(probs_list)} segments")
 
         coarse_segs = []
         coarse_probs_list: List[Dict[str, float]] = []
         coarse_positions: List[float] = []
         if self.coarse_segmenter is not None:
+            if self.verbose:
+                print(f"[Fabula] Using coarse segmenter: {type(self.coarse_segmenter).__name__}")
             coarse_segs = self.coarse_segmenter.segment(text)
+            if self.verbose:
+                print(f"[Fabula] Created {len(coarse_segs)} coarse segments")
             coarse_probs_list = self.scorer.predict_proba([s.text for s in coarse_segs])
+            if self.verbose:
+                print(f"[Fabula] Computed coarse probabilities for {len(coarse_probs_list)} segments")
             coarse_positions = [c.rel_pos for c in coarse_segs]
 
         rows: List[Dict[str, Any]] = []
@@ -183,6 +229,8 @@ class Fabula:
 
             rows.append(row)
 
+        if self.verbose:
+            print(f"[Fabula] Scoring complete: {len(rows)} rows in DataFrame")
         return pd.DataFrame(rows)
 
     def arc(
@@ -196,8 +244,16 @@ class Fabula:
         score_col: str = "score",
         score_cols: Optional[Sequence[str]] = None,
         fallback_to_maxprob: bool = True,
+        normalize: bool = False,
     ) -> ArcResult:
+        if self.verbose:
+            print(f"[Fabula] Computing narrative arc")
+            print(f"[Fabula] Parameters: n_points={n_points}, smooth_window={smooth_window}, smooth_method={smooth_method}")
+
         df = self.score(text)
+
+        if self.verbose:
+            print(f"[Fabula] Processing arc data with {len(df)} points")
 
         raw_x = df["rel_pos"].astype(float).tolist()
         if score_cols:
@@ -219,6 +275,8 @@ class Fabula:
                     sigma=smooth_sigma,
                     pad_mode=smooth_pad_mode,
                 )
+            if self.verbose:
+                print(f"[Fabula] Arc computation complete (multiple series: {', '.join(score_cols)})")
             return ArcResult(
                 x=x_rs,
                 y=None,
@@ -251,6 +309,8 @@ class Fabula:
                     sigma=smooth_sigma,
                     pad_mode=smooth_pad_mode,
                 )
+            if self.verbose:
+                print(f"[Fabula] Arc computation complete (probs mode with {len(labels)} labels)")
             return ArcResult(
                 x=x_rs,
                 y=None,
@@ -287,4 +347,14 @@ class Fabula:
             pad_mode=smooth_pad_mode,
         )
 
+        if normalize:
+            y_min = min(y_sm) if y_sm else 0.0
+            y_max = max(y_sm) if y_sm else 1.0
+            range_span = y_max - y_min or 1.0
+            y_sm = [(y - y_min) / range_span for y in y_sm]
+            if self.verbose:
+                print(f"[Fabula] Applied normalization to arc")
+
+        if self.verbose:
+            print(f"[Fabula] Arc computation complete (score_col={score_col})")
         return ArcResult(x=x_rs, y=y_sm, raw_x=raw_x, raw_y=raw_y)

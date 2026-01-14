@@ -1,0 +1,6 @@
+data/*
+test.ipynb
+.claude
+.pytest_cache
+PIPELINE.md
+src/fabula/__pycache__/
