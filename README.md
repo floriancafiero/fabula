@@ -1,6 +1,6 @@
 # Fabula
 
-Fabula is a Python package for analyzing how sentiment or emotions evolve across a document. It slices text into segments, scores each segment with a Transformers model, and optionally produces a smoothed narrative arc.
+Fabula is a Python package for analyzing how sentiment or emotions evolve across a document. It slices text into segments, scores each segment with a Transformers model, and optionally produces a smoothed narrative arc, according to custom smoothing parameters.
 
 > **Language support**: The bundled defaults target contemporary **French** models, but you can supply any Hugging Face sequence-classification model that matches your analysis labels.
 
