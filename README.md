@@ -68,6 +68,39 @@ Compute a multi-dimensional emotion arc (one column per label):
 fabula arc my.txt --analysis emotion --score-col probs --format csv
 ```
 
+## Demo on bundled novels
+
+Two French novel examples are included in the repository:
+
+- `src/example/tartarin.txt` (Alphonse Daudet, *Tartarin sur les Alpes*)
+- `src/example/lassomoir.txt` (Émile Zola, *L'Assommoir*)
+
+You can run a quick, reproducible demo with `--dummy` (no model downloads):
+
+```bash
+# Tartarin: segment-level sentiment scores
+fabula score src/example/tartarin.txt --dummy --format csv > tartarin_scores.csv
+
+# Tartarin: smoothed sentiment arc
+fabula arc src/example/tartarin.txt --dummy --n-points 120 --smooth-window 9 --format csv > tartarin_arc.csv
+
+# L'Assommoir: segment-level sentiment scores
+fabula score src/example/lassomoir.txt --dummy --format csv > lassomoir_scores.csv
+
+# L'Assommoir: smoothed sentiment arc
+fabula arc src/example/lassomoir.txt --dummy --n-points 120 --smooth-window 9 --format csv > lassomoir_arc.csv
+```
+
+If you want model-based results instead of the dummy scorer, remove `--dummy`:
+
+```bash
+fabula arc src/example/tartarin.txt --n-points 120 --smooth-window 9 --plot tartarin_arc.png
+fabula arc src/example/lassomoir.txt --n-points 120 --smooth-window 9 --plot lassomoir_arc.png
+```
+
+Source attribution for these bundled examples is documented in
+`src/example/README.md`.
+
 ## Models and analysis types
 
 Fabula supports two analysis modes:
